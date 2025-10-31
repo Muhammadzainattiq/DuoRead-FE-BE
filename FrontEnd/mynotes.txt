@@ -1,0 +1,3 @@
+for all the intelligence actions: we firt calling the chrome's apis, and on Fallback calling the backend's apis
+except
+the definition one: for it we are first calling the words api and on failure calling the browser's api

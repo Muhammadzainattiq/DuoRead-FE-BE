@@ -1,0 +1,5 @@
+Problem Statement: Reading barriers prevent billions from accessing knowledge. 75% of global content is in English, leaving non-native speakers struggling with complex texts. Students and professionals waste time switching between multiple apps for translations, definitions, and explanations, often giving up on reading entirely. Manual translation is slow, loses context, and traditional tools don't understand document content. This creates a massive productivity drain and limits learning opportunities worldwide.
+
+
+
+

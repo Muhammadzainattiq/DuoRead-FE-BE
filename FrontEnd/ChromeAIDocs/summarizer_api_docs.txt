@@ -1,0 +1,656 @@
+Using the Translator and Language Detector APIs
+The Translator and Language Detector APIs provide asynchronous (Promise-based) mechanisms for a website to detect languages and translate text via the browser's own internal AI model. This is useful and efficient because the browser handles the service, rather than the developer having to rely on the user downloading AI models, or host or pay for a cloud-based translation service. This article explains how to use these APIs.
+
+In this article
+Detecting a language
+Creating a translation
+Checking configuration support
+Cancelling operations and destroying instances
+Monitoring download progress
+Usage quotas
+Complete example
+Detecting a language
+All of the language detection functionality is accessed through the LanguageDetector interface.
+
+The first step in getting the AI model to detect a language is to create a LanguageDetector object instance. This is done using the LanguageDetector.create() static method, which takes an options object as an argument:
+
+js
+
+Copy
+const detector = await LanguageDetector.create({
+  expectedInputLanguages: ["en-US", "zh"],
+});
+The expectedInputLanguages property specifies the languages you are expecting to feed into the detector, to help improve the accuracy of the language detection.
+
+Note: Different implementations will likely support different languages.
+
+When you've created a LanguageDetector instance, you can use it to detect a language by calling the LanguageDetector.detect() instance method on it, passing it the text to check as an argument.
+
+js
+
+Copy
+const results = await detector.detect(myTextString);
+This method returns an array of objects representing the detected potential language matches. Each one contains:
+
+A string containing a BCP 47 language tag representing the detected language.
+A number between 0 and 1 representing a confidence score for that match.
+So for example:
+
+js
+
+Copy
+results.forEach((result) => {
+  console.log(`${result.detectedLanguage}: ${result.confidence}`);
+});
+
+// Results in logs like this:
+// la: 0.8359838724136353
+// es: 0.017705978825688362
+// sv: 0.012977192178368568
+// en: 0.011148443445563316
+// und: 0.0003214875760022551
+Note: The last array element always represents a confidence score for the und language — this is an abbreviation of "undetermined", and represents the probability that the text is not written in a language the model knows.
+
+Creating a translation
+Translation follows a very similar pattern to language detection. A Translator object instance is created using the Translator.create() static method, which takes an options object that must contain at least a sourceLanguage and targetLanguage:
+
+js
+
+Copy
+const translator = await Translator.create({
+  sourceLanguage: "en",
+  targetLanguage: "ja",
+});
+The translation is then created by calling the Translator.translate() instance method, which is passed the text string to translate as an argument:
+
+js
+
+Copy
+const translation = await translator.translate(myTextString);
+This returns a string containing the translation.
+
+There is also a streaming version of the translate() method available — Translator.translateStreaming() — that allows you to return the translation as a ReadableStream. This can be useful when translating very large bodies of text:
+
+js
+
+Copy
+const stream = translator.translateStreaming(myTextString);
+let translation = "";
+
+for await (const chunk of stream) {
+  translation += chunk;
+}
+
+console.log("Stream complete");
+console.log(translation);
+Checking configuration support
+Before creating a LanguageDetector or Translator object, you can check whether your desired language configuration is supported by the current browser using the LanguageDetector.availability() and Translator.availability() static methods. For example:
+
+js
+
+Copy
+const detectorAvailability = await LanguageDetector.availability({
+  expectedInputLanguages: ["en-US", "ja"],
+});
+
+const translatorAvailability = await Translator.availability({
+  sourceLanguage: "en",
+  targetLanguage: "ja",
+});
+These methods return an enumerated value indicating whether support is, or will be available for the specified set of options:
+
+downloadable means that the implementation supports the requested options, but needs to download a model or some fine-tuning data.
+downloading means that the implementation supports the requested options, but needs to finish an ongoing download.
+available means that the implementation supports the requested options without requiring any new downloads.
+unavailable means that the implementation doesn't support the requested options.
+If a download is required, it will be started automatically by the browser once a LanguageDetector or Translator instance is created using the relevant create() method. You can track download progress automatically using a monitor.
+
+Cancelling operations and destroying instances
+You can cancel a pending detection or translation operation using an AbortController, with the associated AbortSignal being included inside the method options object as a signal property value. For example, aborting a Translator.create() operation would look like this:
+
+js
+
+Copy
+const controller = new AbortController();
+
+const translator = await Translator.create({
+  sourceLanguage: detectedLanguage,
+  targetLanguage: formData.get("translateLanguage"),
+  signal: controller.signal,
+});
+
+// ...
+
+controller.abort();
+After a LanguageDetector or Translator instance has been created, you can release its assigned resources and stop any further activity by calling its LanguageDetector.destroy()/Translator.destroy() method. You are encouraged to do this after you've finished with the object as it can consume a lot of resources.
+
+js
+
+Copy
+translator.destroy();
+detector.destroy();
+If a create() call has an associated AbortController, and you call its AbortController.abort() method after the create() call has succeeded, it will have the same effect as calling destroy() on the resulting LanguageDetector or Translator object.
+
+Monitoring download progress
+If the AI model for a particular detection or translation is downloading (availability() returns downloadable and downloading), it is helpful to provide the user with feedback to tell them how long they need to wait before the operation completes.
+
+The Translator and LanguageDetector create() methods can accept a monitor property, the value of which is a callback function that takes a CreateMonitor instance as an argument. CreateMonitor has a downloadprogress event available, which fires when progress is made on downloading the AI model.
+
+You can use this event to expose loading progress data:
+
+js
+
+Copy
+translator = await Translator.create({
+  sourceLanguage: "en",
+  targetLanguage: "ja",
+  monitor(monitor) {
+    monitor.addEventListener("downloadprogress", (e) => {
+      console.log(`Downloaded ${Math.floor(e.loaded * 100)}%`);
+    });
+  },
+});
+If the specified languages are not supported, a download will not be initiated, and a NotSupportedError DOMException will be thrown.
+
+Usage quotas
+Some implementations have an input quota that governs how many operations a website can request in a given period. The total quota can be accessed via the Translator.inputQuota/LanguageDetector.inputQuota properties, while the quota usage for a particular translation or language detection can be returned using the Translator.measureInputUsage()/LanguageDetector.measureInputUsage() methods:
+
+For example, the below snippet returns the total input quota via Translator.inputQuota and the input quota usage for a translating a particular text string via Translator.measureInputUsage().
+
+We then test to see if the individual input usage for that string is greater than the total available quota. If so, we throw an appropriate error; it not, we commence translating the string using translate().
+
+js
+
+Copy
+const translator = await Translator.create({
+  sourceLanguage: "en",
+  targetLanguage: "ja",
+});
+
+const totalInputQuota = translator.inputQuota;
+const inputUsage = await translator.measureInputUsage(myTextString);
+
+if (inputUsage > totalInputQuota) {
+  throw new Error("Insufficient quota to translate.");
+} else {
+  console.log("Quota available to translate.");
+  const translation = await translator.translate(myTextString);
+  // ...
+}
+If you try to run a language detection or translation operation that exceeds the available quota, a QuotaExceededError DOMException will be thrown.
+
+Complete example
+Let's look at a complete example that demonstrates the Translator and Language Detector APIs in action.
+
+HTML
+In our markup, we first define an input <form> that allows the user to set the text to translate, and language to translate into. This includes a <textarea> for entering the text itself, an <output> element to display the detected language, and a <select> element for choosing a translation language.
+
+html
+
+Copy
+Play
+<h2>Input</h2>
+
+<form>
+  <div>
+    <label for="translate-text">Enter text to translate:</label>
+    <textarea id="translate-text" name="translateText" rows="6"></textarea>
+    <output class="detected-language">Detected language: </output>
+  </div>
+  <div>
+    <label for="translate-language">Choose translation language:</label>
+    <select id="translate-language" name="translateLanguage">
+      <option value="en" selected>English (en)</option>
+      <option value="fr">French (fr)</option>
+      <option value="de">German (de)</option>
+      <option value="it">Italian (it)</option>
+      <option value="zh">Mandarin Chinese (zh)</option>
+      <option value="zh-Hant">Taiwanese Mandarin (zh-Hant)</option>
+      <option value="ja">Japanese (ja)</option>
+      <option value="pt">Portuguese (pt)</option>
+      <option value="ru">Russian (ru)</option>
+      <option value="es">Spanish (es)</option>
+      <option value="tr">Turkish (tr)</option>
+      <option value="hi">Hindi (hi)</option>
+      <option value="vi">Vietnamese (vi)</option>
+      <option value="bn">Bengali (bn)</option>
+    </select>
+  </div>
+  <button type="submit">Translate</button>
+</form>
+The second half of our markup includes a <p> element to display the generated translation.
+
+html
+
+Copy
+Play
+<h2>Translation output</h2>
+
+<p class="translate-output"></p>
+Note that we won't show the CSS for this example, as none of it is relevant to understanding the Translator and Language Detector APIs.
+
+JavaScript
+In our script, we start off by grabbing references to the <form>, <textarea>, submit <button>, translation output <p>, and language detection <output> elements. We also declare a variable called detectedLanguage to contain results of language detection operations.
+
+js
+
+Copy
+Play
+const form = document.querySelector("form");
+const textarea = document.querySelector("textarea");
+const submitBtn = document.querySelector("button");
+
+const translateOutput = document.querySelector(".translate-output");
+const detectedLanguageOutput = document.querySelector(".detected-language");
+let detectedLanguage = "";
+Next, we use the EventTarget.addEventListener() method to listen to two events:
+
+submit events on the <form> element; when the form is submitted, the handleTranslation() function is called.
+input events on the <textarea> element; when the current <textarea> value is changed, the detectLanguage() function is called.
+js
+
+Copy
+Play
+form.addEventListener("submit", handleTranslation);
+textarea.addEventListener("input", detectLanguage);
+The detectLanguage() function, defined next, first checks whether the <textarea> element's value is greater than 20 characters. If so, we carry on with the language detection. If not, we disable the submit button and display a message in the <output> element's textContent saying that the text is too short to detect the language. We do this because language detection generally doesn't work well on single words and very short phrases. If you commonly work with short text, test carefully with your priority languages and return the result as unknown when the confidence is too low.
+
+When detecting the language of the entered text, we create a LanguageDetector instance using the create() method, which includes a monitor to log download progress if the model takes a while to download. We then detect the language using the detect() method, passing it the <textarea> value. When the results are returned, we write the language and confidence of the top result into the <output> element. In more complex apps, you might want to report multiple results and possibly let the user choose what language it is, but this will do for the demo.
+
+Finally, we set the submit button to not be disabled, so the form can be submitted to start the translation.
+
+js
+
+Copy
+Play
+async function detectLanguage() {
+  if (textarea.value.length > 20) {
+    const detector = await LanguageDetector.create({
+      monitor(monitor) {
+        monitor.addEventListener("downloadprogress", (e) => {
+          console.log(`Downloaded ${e.loaded * 100}%`);
+        });
+      },
+    });
+
+    const results = await detector.detect(textarea.value);
+    detectedLanguageOutput.textContent = `Detected language: ${
+      results[0].detectedLanguage
+    }. Confidence: ${results[0].confidence.toFixed(4)}`;
+    detectedLanguage = results[0].detectedLanguage;
+
+    submitBtn.disabled = false;
+  } else {
+    detectedLanguageOutput.textContent = `Text too short to accurately detect language.`;
+    detectedLanguage = "";
+
+    submitBtn.disabled = true;
+  }
+}
+Now we define the handleTranslation() function. After preventing the form's default submission, we create a new FormData object instance containing our <form> data name/value pairs. We then run a data validation test, checking whether the detected <textarea> content language is the same as the language chosen to translate into (translateLanguage). If it is, we print an error message inside the <p> with class translate-output.
+
+js
+
+Copy
+Play
+async function handleTranslation(e) {
+  e.preventDefault();
+
+  const formData = new FormData(form);
+
+  if (formData.get("translateLanguage") === detectedLanguage) {
+    translateOutput.innerHTML = `<span class="error">Input language and translation language are the same.</span>`;
+    return;
+  }
+  translateOutput.innerHTML = "";
+If the test passes, we open a try { ... } block. We start by checking the availability of the model for translating between the detected input and chosen output languages using the availability() method:
+
+If it returns unavailable, we print an appropriate error message inside the <p> with class translate-output.
+If it returns available, we create a translator using the create() method, passing it the detected input and chosen output languages. The required AI model is available, so we can use it immediately.
+If it returns a different value (that is, downloadable or downloading), we run the same create() method call, but this time we include a monitor that prints out the percentage of the model downloaded to the translate-output <p> each time the downloadprogress event fires.
+js
+
+Copy
+Play
+  try {
+    const availability = await Translator.availability({
+      sourceLanguage: detectedLanguage,
+      targetLanguage: formData.get("translateLanguage"),
+    });
+    let translator;
+
+    if (availability === "unavailable") {
+      translateOutput.innerHTML = `<span class="error">Translation not available; try a different language combination.</span>`;
+      return;
+    } else if (availability === "available") {
+      translator = await Translator.create({
+        sourceLanguage: detectedLanguage,
+        targetLanguage: formData.get("translateLanguage"),
+      });
+    } else {
+      translator = await Translator.create({
+        sourceLanguage: detectedLanguage,
+        targetLanguage: formData.get("translateLanguage"),
+        monitor(monitor) {
+          monitor.addEventListener("downloadprogress", (e) => {
+            translateOutput.textContent = `Downloaded ${Math.floor(
+              e.loaded * 100
+            )}%`;
+          });
+        },
+      });
+    }
+Next, we set the output <p> content to a pending message and disable the submit button before calling Translator.translate() to perform the actual translation, passing it the <textarea> value. Once the translation is done, we display it inside the output <p> before making the submit button not disabled again.
+
+js
+
+Copy
+Play
+translateOutput.textContent = "...generating translation...";
+submitBtn.disabled = true;
+
+const translation = await translator.translate(formData.get("translateText"));
+
+translateOutput.textContent = translation;
+submitBtn.disabled = false;
+Finally, we include the try block's counterpart catch() { ... } block. If the try content throws any kind of exception, we display it inside the output <p>.
+
+js
+
+Copy
+Play
+  } catch (e) {
+    translateOutput.innerHTML = `<span class="error">${e}</span>`;
+  }
+}
+
+
+Using the Summarizer API
+The Summarizer API provides an asynchronous (Promise-based) mechanism for a website to feed a body of text into the browser's own internal AI model and request that it returns a summary of the text based on specified options. This article explains how to use the fundamentals of the Summarizer API.
+
+In this article
+Creating a summarizer
+Checking configuration support
+Generating a summary
+Cancelling operations and destroying instances
+Monitoring download progress
+Usage quotas
+Complete example
+See also
+Creating a summarizer
+All of the Summarizer API's functionality is accessed through a single interface — Summarizer.
+
+The first step in getting the browser AI model to output a summary is to create a Summarizer object instance. This is done using the Summarizer.create() static method, which takes an options object as an argument specifying options for what kind of summary you want written:
+
+js
+
+Copy
+const summarizer = await Summarizer.create({
+  sharedContext:
+    "A general summary to help a user decide if the text is worth reading",
+  type: "tldr",
+  length: "short",
+  format: "markdown",
+  expectedInputLanguages: ["en-US"],
+  outputLanguage: "en-US",
+});
+The sharedContext option provides a string that helps the AI model write a more suitable summary for the context the text is being used in, while the type specifies what kind of summary you want to provide, like key bullet points or a "tldr" summary.
+
+We also specify the desired length, output format, expectedInputLanguages, and desired outputLanguage. If the input and output languages are not specified, the language of the input text is auto-detected, and the output language will match the input language.
+
+If the browser's AI model does not support the specified input or output languages, an error is thrown.
+
+Note: See the create() reference page for the full list of available options.
+
+Checking configuration support
+Before creating a Summarizer, you can check whether your desired configuration is supported by the current browser using the Summarizer.availability() static method. For example:
+
+js
+
+Copy
+const availability = await Summarizer.availability({
+  type: "tldr",
+  length: "short",
+  format: "markdown",
+  expectedInputLanguages: ["en-US"],
+  outputLanguage: "en-US",
+});
+This method returns an enumerated value indicating whether support is, or will be available for the specified set of options:
+
+downloadable means that the browser supports the requested options, but it first needs to download an AI model, or some fine-tuning data for the model.
+downloading means that the browser supports the requested options, but needs to finish an ongoing download before it can proceed.
+available means that the browser supports the given configuration without requiring any new downloads.
+unavailable means that the browser does not support the given configuration.
+If a download is required, it will be started automatically by the browser once a Summarizer instance is created using the create() method. You can track download progress automatically using a monitor.
+
+Generating a summary
+When you've determined that your desired configuration works and you've created a Summarizer instance, you can use it to generate a summary by calling the Summarizer.summarize() instance method on it, passing it the text to summarize as an argument.
+
+js
+
+Copy
+const summary = await summarizer.summarize(myTextString);
+console.log(summary);
+It also optionally accepts an options object as a second argument that can accept a context string specific to this summary, and an abort signal allowing the summary request to be aborted (see next section).
+
+There is a streaming version of the summarize() method available — Summarizer.summarizeStreaming() — that allows you to return the summary as a ReadableStream:
+
+js
+
+Copy
+const stream = summarizer.summarizeStreaming(myTextString);
+let summary = "";
+
+for await (const chunk of stream) {
+  summary += chunk;
+}
+
+console.log("Stream complete");
+summaryOutput.textContent = summary;
+Cancelling operations and destroying instances
+You can cancel a pending create(), summarize(), or summarizeStreaming() operation using an AbortController, with the associated AbortSignal being included inside the method options object as a signal property value. For example, aborting a Summarizer.create() operation would look like this:
+
+js
+
+Copy
+const controller = new AbortController();
+const summary = await summarizer.summarize(myTextString, {
+  signal: controller.signal,
+});
+
+// ...
+
+controller.abort();
+After a Summarizer instance has been created, you can release its assigned resources and stop any further activity by calling its Summarizer.destroy() method. You are encouraged to do this after you've finished with the Summarizer object as it can consume a lot of resources.
+
+js
+
+Copy
+summarizer.destroy();
+If a create() call has an associated AbortController, and you call its AbortController.abort() method after the create() call has succeeded, it will have the same effect as calling destroy() on the resulting Summarizer object.
+
+Monitoring download progress
+If the AI model for a particular summarizer is downloading (availability() returns downloadable and downloading), it is helpful to provide the user with feedback to tell them how long they need to wait before the operation completes.
+
+The Summarizer.create() method can accept a monitor property, the value of which is a callback function that takes a CreateMonitor instance as an argument. CreateMonitor has a downloadprogress event available, which fires when progress is made on downloading the AI model. You can use this event to expose loading progress data:
+
+js
+
+Copy
+const summarizer = await Summarizer.create({
+  sharedContext:
+    "A general summary to help a user decide if the text is worth reading",
+  type: "tldr",
+  length: "short",
+  monitor(monitor) {
+    monitor.addEventListener("downloadprogress", (e) => {
+      console.log(`Downloaded ${Math.floor(e.loaded * 100)}%`);
+    });
+  },
+});
+Usage quotas
+Some implementations have an input quota that governs how many operations a website can request in a given period. The total quota can be accessed via the Summarizer.inputQuota property, while the quota usage for a particular summary operation can be returned using the Summarizer.measureInputUsage() method:
+
+For example, in the below snippet, we create a new Summarizer instance using create(), then return the total input quota via inputQuota and the input quota usage for a summarizing a particular text string via measureInputUsage().
+
+We then test to see if the individual input usage for that string is great than the total available quota. If so, we throw an appropriate error; it not, we commence summarizing the string using summarize().
+
+js
+
+Copy
+const summarizer = await Summarizer.create({
+  sharedContext:
+    "A general summary to help a user decide if the text is worth reading",
+  type: "tldr",
+  length: "short",
+});
+
+const totalInputQuota = summarizer.inputQuota;
+const inputUsage = await summarizer.measureInputUsage(myTextString);
+
+if (inputUsage > totalInputQuota) {
+  throw new Error("Boo, insufficient quota to generate a summary.");
+} else {
+  console.log("Yay, quota available to generate a summary.");
+  const summary = await summarizer.summarize(myTextString);
+  // ...
+}
+If you try to run a summarize operation that exceeds the available quota, a QuotaExceededError DOMException will be thrown.
+
+Complete example
+Let's look at a complete example that demonstrates the Summarizer API in action.
+
+HTML
+In our markup, we first define an input <form> that allows the user to set the text to summarize, and configuration options. This includes a <textarea> for entering the text to be summarized, an <output> element to display the character count of the text set by the user, and two <select> elements for choosing a summarizer type and length.
+
+html
+
+Copy
+Play
+<h2>Input</h2>
+
+<form>
+  <div>
+    <label for="summary-text">Enter text to summarize:</label>
+    <textarea id="summary-text" name="summaryText" rows="6"></textarea>
+    <output class="input-count">Input character count: </output>
+  </div>
+  <div>
+    <label for="summary-type">Summary type:</label>
+    <select id="summary-type" name="summaryType">
+      <option value="headline">Headline</option>
+      <option value="key-points">Key points</option>
+      <option value="teaser">Teaser</option>
+      <option value="tldr" selected>tldr</option>
+    </select>
+  </div>
+  <div>
+    <label for="summary-length">Summary length:</label>
+    <select id="summary-length" name="summaryLength">
+      <option value="short" selected>Short</option>
+      <option value="medium">Medium</option>
+      <option value="long">Long</option>
+    </select>
+  </div>
+  <button type="submit">Submit</button>
+</form>
+The second half of our markup includes a <p> element to display the generated summary, and a second <output> element to display the summary character count.
+
+html
+
+Copy
+Play
+<h2>Summary output</h2>
+
+<p class="summary-output"></p>
+<output class="output-count">Output summary character count: 0</output>
+Note that we won't show the CSS for this example, as none of it is relevant to understanding the Summarizer API.
+
+JavaScript
+In our script, we start off by grabbing references to the <form>, <textarea>, submit <button>, summary output <p>, and two <output> elements.
+
+js
+
+Copy
+Play
+const form = document.querySelector("form");
+const textarea = document.querySelector("textarea");
+const submitBtn = document.querySelector("button");
+
+const summaryOutput = document.querySelector(".summary-output");
+const inputCount = document.querySelector(".input-count");
+const outputCount = document.querySelector(".output-count");
+Next, we use the EventTarget.addEventListener() method to listen to two sets of events:
+
+submit events on the <form> element; when the submit button is clicked, the handleSubmission() function is called.
+input events on the <textarea> element; when the current <textarea> value is changed, the updateInputCount() function is called.
+js
+
+Copy
+Play
+form.addEventListener("submit", handleSubmission);
+textarea.addEventListener("input", updateInputCount);
+The updateInputCount() function, defined next, sets the first <output> element's textContent to a string containing the length of the <textarea> value. We also define a counterpart displayOutputCount() function that does the same thing for the second <output> element. This isn't called until near the end of the handleSubmission() function, after the summary has been returned.
+
+js
+
+Copy
+Play
+function updateInputCount() {
+  inputCount.textContent = `Input character count: ${textarea.value.length}`;
+}
+
+function displayOutputCount() {
+  outputCount.textContent = `Output summary character count: ${summaryOutput.textContent.length}`;
+}
+Now we define the handleSubmission() function itself. After preventing the default form submission, we create a new FormData object instance containing all our <form> data name/value pairs. We then run some data validation tests, checking whether the <textarea> content (summaryText) is empty or too short to waste cycles on, and printing an error message inside the summary output <p> if so.
+
+Provided the text passed the tests, we create a Summarizer object using the create() method, passing it a sharedContext string and the type (summaryType) and length (summaryLength) values selected in the form. We then set the output summary <p> and <output> to "pending" messages and disable the <submit> button while we run the summarize() operation.
+
+After the summary value is successfully returned, we set it as the output summary <p> element's textContent, call displayOutputCount() to display the output character count in the second <output> element, and reenable the submit <button>.
+
+js
+
+Copy
+Play
+async function handleSubmission(e) {
+  e.preventDefault();
+  const formData = new FormData(form);
+
+  if (formData.get("summaryText") === "") {
+    summaryOutput.innerHTML = `<span class="error">No text entered to summarize!</span>`;
+    return;
+  } else if (formData.get("summaryText").length < 100) {
+    summaryOutput.innerHTML = `<span class="error">I'm not trying to summarize something that short!</span>`;
+    return;
+  }
+  summaryOutput.innerHTML = "";
+
+  try {
+    const summarizer = await Summarizer.create({
+      sharedContext:
+        "A general summary to help a user decide if the text is worth reading",
+      type: formData.get("summaryType"),
+      length: formData.get("summaryLength"),
+    });
+
+    summaryOutput.textContent = "...generating summary...";
+    outputCount.textContent = "Output summary character count: -";
+    submitBtn.disabled = true;
+
+    const summary = await summarizer.summarize(formData.get("summaryText"));
+
+    summaryOutput.textContent = summary;
+    displayOutputCount();
+    submitBtn.disabled = false;
+  } catch (e) {
+    summaryOutput.innerHTML = `<span class="error">${e}</span>`;
+  }
+}
+The final step is to call the updateInputCount() function at the top level of the script, to ensure that the first <output> element containing the input count always displays the correct value on page load.
+
+js
+
+Copy
+Play
+updateInputCount();

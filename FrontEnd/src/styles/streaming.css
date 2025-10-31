@@ -1,0 +1,126 @@
+/* Streaming UI Enhancements */
+.streaming-text {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: inherit;
+  line-height: 1.6;
+}
+
+.streaming-cursor {
+  animation: blink 1s infinite;
+  font-weight: bold;
+  color: hsl(var(--primary));
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.streaming-container {
+  border: 1px solid hsl(var(--border));
+  padding: 16px;
+  border-radius: 8px;
+  background-color: hsl(var(--secondary));
+  min-height: 100px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.streaming-indicator {
+  display: inline-block;
+  margin-left: 8px;
+}
+
+/* Preserve formatting for markdown content */
+.streaming-markdown {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.streaming-markdown h1,
+.streaming-markdown h2,
+.streaming-markdown h3,
+.streaming-markdown h4,
+.streaming-markdown h5,
+.streaming-markdown h6 {
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  font-weight: bold;
+}
+
+.streaming-markdown p {
+  margin-bottom: 1em;
+}
+
+.streaming-markdown ul,
+.streaming-markdown ol {
+  margin-left: 2em;
+  margin-bottom: 1em;
+}
+
+.streaming-markdown li {
+  margin-bottom: 0.5em;
+}
+
+.streaming-markdown code {
+  background-color: hsl(var(--muted));
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.streaming-markdown pre {
+  background-color: hsl(var(--muted));
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin-bottom: 1em;
+}
+
+.streaming-markdown blockquote {
+  border-left: 4px solid hsl(var(--primary));
+  padding-left: 16px;
+  margin-left: 0;
+  margin-bottom: 1em;
+  font-style: italic;
+}
+
+/* No Definition Found styling */
+.no-definition-found {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.no-definition-found .main-message {
+  font-style: italic;
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+}
+
+.no-definition-found .sub-message {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+/* AI Generated badge styles */
+.ai-generated-badge {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
