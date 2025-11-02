@@ -107,4 +107,4 @@ npm run preview
 If you'd like, I can also:
 - Add a short `CONTRIBUTING.md` with branch and PR guidelines
 - Add a script to start both backend and frontend concurrently (e.g., using `concurrently` or `npm-run-all`)
-
+.
