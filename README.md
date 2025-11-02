@@ -1,6 +1,6 @@
 # DuoRead (Frontend + Backend)
 
-This repository contains the frontend (DuoRead-FE-Chrome) with instructions to run both the backend and frontend locally.
+This repository contains the frontend (DuoRead-FE-BE) with instructions to run both the backend and frontend locally.
 
 Below are concise, clearly separated steps for each part of the project.
 
